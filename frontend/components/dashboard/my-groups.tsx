@@ -12,12 +12,13 @@ import {
 } from "@/components/ui/pagination"
 import { Search } from "lucide-react"
 import { motion } from "framer-motion"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useStellar } from "@/components/web3-provider"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { FirstPoolTooltip } from "@/components/dashboard/first-pool-tooltip"
 import { PoolCard, PoolCardSkeleton, type Pool } from "@/components/dashboard/pool-card"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
 const PAGE_SIZE = 6
 
@@ -43,6 +44,10 @@ export function MyGroups({ onCreateClick }: MyGroupsProps) {
 
   const page = Math.max(0, parseInt(searchParams.get("page") || "0", 10))
   const searchTerm = searchParams.get("search") || ""
+  const [searchInput, setSearchInput] = useState(searchTerm)
+  const debouncedSearchInput = useDebouncedValue(searchInput, 300)
+  const searchInputRef = useRef(searchTerm)
+  const skipNextDebouncedSearchSync = useRef(false)
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   const setPage = useCallback(
@@ -68,6 +73,30 @@ export function MyGroups({ onCreateClick }: MyGroupsProps) {
     },
     [router, searchParams]
   )
+
+  useEffect(() => {
+    if (searchTerm !== searchInputRef.current) {
+      skipNextDebouncedSearchSync.current = true
+      searchInputRef.current = searchTerm
+      setSearchInput(searchTerm)
+    }
+  }, [searchTerm])
+
+  useEffect(() => {
+    if (skipNextDebouncedSearchSync.current) {
+      skipNextDebouncedSearchSync.current = false
+      return
+    }
+
+    if (debouncedSearchInput !== searchTerm) {
+      setSearchTerm(debouncedSearchInput)
+    }
+  }, [debouncedSearchInput, searchTerm, setSearchTerm])
+
+  const handleSearchInputChange = useCallback((term: string) => {
+    searchInputRef.current = term
+    setSearchInput(term)
+  }, [])
 
   useEffect(() => {
     if (!address) {
@@ -162,8 +191,8 @@ export function MyGroups({ onCreateClick }: MyGroupsProps) {
         <Input
           type="text"
           placeholder="Search pools by name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          value={searchInput}
+          onChange={(e) => handleSearchInputChange(e.target.value)}
           className="pl-9"
         />
       </div>
@@ -179,7 +208,7 @@ export function MyGroups({ onCreateClick }: MyGroupsProps) {
           <p className="text-sm text-muted-foreground max-w-sm">
             Try adjusting your search term or{" "}
             <button
-              onClick={() => setSearchTerm("")}
+              onClick={() => handleSearchInputChange("")}
               className="text-primary hover:underline"
             >
               clear the search
